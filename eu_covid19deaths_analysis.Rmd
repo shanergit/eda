@@ -1,0 +1,267 @@
+---
+title: "EU and EEA Covid-19 Deaths Analysis"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, warning = FALSE,
+                      message = FALSE)
+
+library(ggplot2)
+library(gridExtra)
+library(lubridate)
+library(tidyverse)
+library(dplyr)
+library(Hmisc)
+
+data <- read.csv("https://opendata.ecdc.europa.eu/covid19/nationalcasedeath_eueea_daily_ei/csv",
+                 na.strings = "", fileEncoding = "UTF-8-BOM")
+
+glimpse(data)
+
+data <- data %>%
+  select(-c("continentExp")) %>%
+  mutate(dateRep = dmy(dateRep),
+         countriesAndTerritories = as.factor(countriesAndTerritories),
+         geoId = as.factor(geoId),
+         countryterritoryCode = as.factor(countryterritoryCode))
+
+```
+
+A data dictionary for the dataset is available [here](https://www.ecdc.europa.eu/sites/default/files/documents/Description-and-disclaimer_daily_reporting.pdf).
+
+#### Definitions:
+
+* "Incidence rate" is equal to new daily cases per 100K individuals. Country population estimates can be found in 'popData2020.' 
+
+* "Fatality rate" is equal to new daily deaths per 100K individuals. Country population estimates can be found in 'popData2020.' 
+
+---
+
+#### 1. Descriptive Statistics
+
+```{r descriptive_stats, fig.width = 8, fig.height = 8}
+#adds 'incidence rate' vector to dataframe
+data$incidence_rate<-data$cases/(data$popData2020/100000)
+
+#adds 'fatality rate' vector to dataframe
+data$fatality_rate<-data$deaths/(data$popData2020/100000)
+
+head(data)
+
+SubSet.1<-subset(data,data$countriesAndTerritories=="Austria"|data$countriesAndTerritories=="Estonia"|
+data$countriesAndTerritories=="Germany"|data$countriesAndTerritories=="Greece"|
+data$countriesAndTerritories=="Latvia")
+
+SubSet.1<-SubSet.1[order(SubSet.1$dateRep),]
+
+ggplot(SubSet.1,aes(x=as.Date(dateRep),
+                  y=incidence_rate,
+                  col=(countriesAndTerritories)))+geom_point() + ylim(0,700) + ggtitle("Incidence Rate by Date") + xlab("Date") + ylab("Incidence Rate")
+
+ggplot(SubSet.1,aes(x=as.Date(dateRep),
+                  y=fatality_rate,
+                  col=(countriesAndTerritories)))+geom_point() + ylim(0,5) + ggtitle("Fatality Rate by Date") + xlab("Date") + ylab("Fatality Rate")
+
+Austria<-subset(data,data$countriesAndTerritories=='Austria')
+Total_Austria_Deaths<-sum(Austria$deaths)
+Total_Austria_Cases<-sum(Austria$cases)
+DeathPerCase_Austria<-Total_Austria_Deaths/Total_Austria_Cases
+
+Estonia<-subset(data,data$countriesAndTerritories=='Estonia')
+Total_Estonia_Deaths<-sum(Estonia$deaths,na.rm=TRUE)
+Total_Estonia_Cases<-sum(Estonia$cases,na.rm=TRUE)
+DeathPerCase_Estonia<-Total_Estonia_Deaths/Total_Estonia_Cases
+
+Germany<-subset(data,data$countriesAndTerritories=='Germany')
+Total_Germany_Deaths<-sum(Austria$deaths,na.rm=TRUE)
+Total_Germany_Cases<-sum(Germany$cases,na.rm=TRUE)
+DeathPerCase_Germany<-Total_Germany_Deaths/Total_Germany_Cases
+
+Greece<-subset(data,data$countriesAndTerritories=='Greece')
+Total_Greece_Deaths<-sum(Greece$deaths,na.rm=TRUE)
+Total_Greece_Cases<-sum(Greece$cases,na.rm=TRUE)
+DeathPerCase_Greece<-Total_Austria_Deaths/Total_Greece_Cases
+
+Latvia<-subset(data,data$countriesAndTerritories=='Latvia')
+Total_Latvia_Deaths<-sum(Latvia$deaths,na.rm=TRUE)
+Total_Latvia_Cases<-sum(Latvia$cases,na.rm=TRUE)
+DeathPerCase_Latvia<-Total_Latvia_Deaths/Total_Latvia_Cases
+
+Country<-c('Austria','Estonia','Germany','Greece','Latvia')
+DeathPerCase<-c(DeathPerCase_Austria,DeathPerCase_Estonia,DeathPerCase_Germany,DeathPerCase_Greece,
+DeathPerCase_Latvia)
+
+Death_Table<-data.frame(cbind(Country,DeathPerCase))
+
+ggplot(Death_Table,aes(x=Country,
+                  y=DeathPerCase, 
+                  col=(Country)))+geom_col()+ggtitle('Death Table')
+
+```
+
+#### 2. Inferential Statistics
+
+```{r inferential_stats, fig.width = 9, fig.height = 8}
+SubSet.2<-subset(data,data$countriesAndTerritories=="Austria")
+SubSet.2<-SubSet.2[order(SubSet.2$dateRep),]
+SubSet.3<-subset(data,data$countriesAndTerritories=="Germany")
+SubSet.3<-SubSet.3[order(SubSet.3$dateRep),]
+
+hist(SubSet.2$incidence_rate, main="Incidence Rate Frequency, Austria", xlab="Incidence Rate")
+summary(SubSet.2$incidence_rate)
+hist(SubSet.3$incidence_rate, main="Incidence Rate Frequency, Germany", xlab="Incidence Rate")
+summary(SubSet.3$incidence_rate)
+
+prop.test(x=c(mean(SubSet.2$incidence_rate),mean(SubSet.3$incidence_rate)),n=c(100000,100000))
+
+
+#null hypo is the mean() incidence rate of Austria - the mean incidence rate of Germany = 0 
+#justification: 1) it's categorical data (proportions), 2) working with two samples; 3)comparing the data, Germany vs Austria; hence, we use the two-proportion sample test
+#Assumptions of the Two Sample Z Proportion Hypothesis Tests 
+#The data are simple random values from both the populations
+#Both populations follow a binomial distribution
+#Samples are independent of each other
+#Test results are accurate when np and n(1-p) are greater than 5
+#alpha is .05
+#fail to reject null hypothesis because p-value of .06591 is greater than the significance level alpha of .05
+#therefore, no significant difference between the two countries Austria and Germany
+```
+
+#### 3. Correlation
+  
+```{r correlation, fig.width = 8, fig.height = 8}
+plot(x=data$incidence_rate,y=data$fatality_rate,xlim=c(0,270),ylim=c(0,10), main="Fatality Rate by Incidence Rate",xlab="Incidence Rate", ylab="Fatality Rate")
+
+ggplot(data, aes(x=incidence_rate)) +
+  geom_boxplot()+xlim(0,50) + ggtitle("Incidence Rate Boxplot") + xlab("Incidence Rate")
+
+ggplot(data, aes(x=fatality_rate)) +
+  geom_boxplot()+xlim(0,2) + ggtitle("Fatality Rate Boxplot") + xlab("Fatality Rate")
+
+ggplot(data, aes(x=incidence_rate)) +
+  geom_histogram()+xlim(0,300) + ylim(0,300) + ggtitle("Incidence Rate Histogram") + xlab("Incidence Rate")
+
+ggplot(data, aes(x=fatality_rate)) +
+  geom_histogram()+xlim(0,10) + ylim(0,300) + ggtitle("Fatality Rate Histogram") + xlab("Fatality Rate")
+
+cor.test(as.numeric(data$fatality_rate),as.numeric(data$incidence_rate), method = 'spearman')
+
+#Chose the Spearman method because of the skewed data and extreme values (outliers)
+#The scatterplot, and correlation coefficient of .1, suggest low correlation between fatality rate and incidence rate
+#Scaled x limits on plots because, by definition, fatality rates are a fraction of incidence rates
+#y limits are the same on the histograms as to compare the shapes of the distributions
+```
+
+#### 4. Regression
+
+```{r regression_a, fig.width = 8, fig.height = 8}
+
+# The code below creates a new data frame, 'model_df,' that includes the area,
+# GDP per capita, population and population density for the twenty (20)
+# countries of interest
+
+twenty_countries <- c("Austria", "Belgium", "Bulgaria", "Cyprus", "Denmark",
+                      "Finland", "France", "Germany", "Hungary", "Ireland",
+                      "Latvia", "Lithuania", "Malta", "Norway", "Poland",
+                      "Portugal", "Romania", "Slovakia", "Spain", "Sweden")
+
+sq_km <- c(83858, 30510, 110994, 9251, 44493, 338145, 551695, 357386, 93030,
+           70273, 64589, 65300, 316, 385178, 312685, 88416, 238397, 49036,
+           498511, 450295)
+
+gdp_pps <- c(128, 118, 51, 91, 129, 111, 104, 123, 71, 190, 69, 81, 100, 142,
+             71, 78, 65, 71, 91, 120)
+
+model_df <- data %>%
+  select(c(countriesAndTerritories, popData2020)) %>%
+  filter(countriesAndTerritories %in% twenty_countries) %>%
+  distinct(countriesAndTerritories, .keep_all = TRUE) %>%
+  add_column(sq_km, gdp_pps) %>%
+  mutate(pop_dens = popData2020 / sq_km) %>%
+  rename(country = countriesAndTerritories, pop = popData2020)
+
+```
+
+
+```{r regression_b}
+
+total_cases <- data %>%
+  select(c(countriesAndTerritories, cases)) %>%
+  group_by(countriesAndTerritories) %>%
+  dplyr::summarize(total_cases = sum(cases, na.rm = TRUE)) %>%
+  filter(countriesAndTerritories %in% twenty_countries) %>%
+  select(total_cases)
+
+model_df <- model_df %>%
+  add_column(total_cases)
+
+```
+
+
+```{r regression_c}
+#model<-lm(model_df$total_cases ~ model_df$pop + model_df$pop_dens + model_df$gdp_pps)
+#summary(model)
+
+model<-lm(total_cases ~ pop + pop_dens + gdp_pps, data=model_df)
+model
+
+summary(model)
+summary(model)$coefficient
+
+#Dependent Variable vs Individual Independent Variable
+model1<-lm(model_df$total_cases ~ model_df$pop, data=model_df)
+model1
+
+plot(model_df$total_cases,model_df$pop,main="Population and Total Cases", xlab="Total Cases", ylab="Population")
+summary(model1)
+
+model2<-lm(model_df$total_cases ~ model_df$pop_dens)
+
+plot(model_df$total_cases,model_df$pop_dens,main="Population Density and Total Cases", xlab="Total Cases", ylab="Population Density")
+summary(model2)
+
+model3<-lm(model_df$total_cases ~model_df$gdp_pps)
+
+plot(model_df$total_cases,model_df$gdp_pps,main="GDP and Total Cases", xlab="Total Cases", ylab="GDP")
+summary(model3)
+
+#Population is statistically significant: t value is high, Pr is low and less than the alpha of .05, indicating statistical significance
+#r^2 is 0.8994
+#A reduced model without population density and GDP might be in order given their low t values and high Pr
+#"Model" here appears to be the most appropriate model, given the apparent strong correlation between population total cases
+```
+
+  
+```{r regression_d}
+
+# The code below defines our 'newdata' data frame for applying our model to the
+# population, population density and GDP per capita for two (2). 
+
+newdata <- data.frame(country = c("Luxembourg", "Netherlands"),
+                      pop = c(626108, 17407585),
+                      gdp_pps = c(261, 130),
+                      pop_dens = c(626108, 17407585) / c(2586, 41540))
+
+Lux<-subset(data, data$countriesAndTerritories=="Luxembourg")
+Neth<-subset(data, data$countriesAndTerritories=="Netherlands")
+
+Total_Cases_Lux<-sum(Lux$cases)
+Total_Cases_Neth<-sum(Neth$cases)
+Total_Cases_Lux_Neth_Actual<-c(Total_Cases_Lux,Total_Cases_Neth)
+c("The total cases for Luxembourg and Netherlands:" ,Total_Cases_Lux_Neth_Actual)
+
+predictOutput<-round(predict(model,newdata),4)
+c("The predicted totals for Luxembourg and Netherlands:" ,predictOutput)
+
+prediction<-round(predict(model,newdata),4)
+
+ResidualLux<-round(Total_Cases_Lux_Neth_Actual[1]-prediction[1],4)
+ResidualNeth<-round(Total_Cases_Lux_Neth_Actual[2]-prediction[2],4)
+c("The residual for Luxembourg:" ,ResidualLux)
+c("The residual for Netherlands:" ,ResidualNeth)
+
+#The predicted total for the Netherlands is fairly close (residual of 1359905 in a country of population 17407585 and actual cases of 8377385); the predicted total for Luxembourg is off (residual of -3268118 in a country of population 626108)
+```
